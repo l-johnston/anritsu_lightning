@@ -647,7 +647,7 @@ class Disk(Subsystem, kind="Disk"):
         if from_floppy:
             original_timeout = self._visa.timeout
             # increase timeout to allow for floppy disk op
-            self._visa.timeout = 10000  # ms
+            self._visa.timeout = 20000  # ms
             self._visa.query("LKT;*OPC?")
             self._visa.timeout = original_timeout
         else:
