@@ -349,6 +349,17 @@ class Lightning(InstrumentBase):
         self.active_channel = original_active_ch
         return dataset
 
+    @property
+    def sweep_frequencies(self):
+        """Return sweep frequencies
+
+        Returns
+        -------
+        frequencies : np.ndarray in hertz
+        """
+        self._visa.write("FMB;LSB;OFV")
+        return self._visa.read_binary_values(datatype="d", container=np.ndarray)
+
 
 class MeasurementSetup(Subsystem, kind="MeasurementSetup"):
     """Measurement setup"""
