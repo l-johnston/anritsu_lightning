@@ -360,6 +360,57 @@ class Lightning(InstrumentBase):
         self._visa.write("FMB;LSB;OFV")
         return self._visa.read_binary_values(datatype="d", container=np.ndarray)
 
+    @property
+    def averaging(self):
+        """sweep-by-sweep averaging
+
+        Parameters
+        ----------
+        value : int
+            number of sweep-by-sweep averages (set to 1 to turn off averaging)
+
+        Returns
+        -------
+        count : int
+        """
+        return int(self._visa.query("AVG?"))
+
+    @averaging.setter
+    @validate
+    def averaging(self, value):
+        if value > 1:
+            self._visa.write(f"SWAVG;AVG {value}")
+        else:
+            self._visa.write("AOF")
+
+    @property
+    def avg_count(self):
+        """Return current averaging sweep count"""
+        return int(self._visa.query("AVGCNT?"))
+
+    @property
+    def smoothing(self):
+        """smoothing as a percent of sweep
+
+        Parameters
+        ----------
+        value : float
+            amount of smoothing as a percent of sweep time (set to 0 to turn off)
+
+        Returns
+        -------
+        value : float
+        """
+        return float(self._visa.query("SON?"))
+
+    @smoothing.setter
+    @validate
+    def smoothing(self, value):
+        if value > 0:
+            self._visa.write(f"SON {value}")
+        else:
+            self._visa.write("SOF")
+
 
 class MeasurementSetup(Subsystem, kind="MeasurementSetup"):
     """Measurement setup"""
@@ -506,7 +557,7 @@ class Channel(Subsystem, kind="Channel"):
 
         Parameters
         ----------
-        value : str {}
+        value : str {'log magnitude', 'log magnitude and phase', 'smith chart'}
         """
         grf = self._visa.query(f"CH{self._ch};GRF?")
         return GRAPHTYPES[grf]
