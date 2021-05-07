@@ -72,6 +72,7 @@ class Lightning(InstrumentBase):
         self.ch4 = Channel(self, 4)
         self._state = State()
         self.disk = Disk(self)
+        self.markers = Markers(self)
 
     @property
     def model(self):
@@ -718,3 +719,169 @@ class Disk(Subsystem, kind="Disk"):
                 kitinfo = self._format_arbitraryblock(f.read())
             payload = bytes(f"IKIT '{extension}', ".encode("ascii")) + kitinfo + b"\n"
             self._visa.write_raw(payload)
+
+
+class Markers(Subsystem, kind="Markers"):
+    """Marker readout subsystem"""
+
+    MODES = {"0": "normal", "1": "active", "2": "filter parameters", "3": "search"}
+    MODESLU = {
+        "normal": "NMKR",
+        "active": "AMKR",
+        "filter parameters": "FMKR",
+        "search": "SMKR",
+    }
+
+    @property
+    def mode(self):
+        """Readout mode
+
+        Parameters
+        ----------
+        value : str {normal, active, filter parameters, search}
+        """
+        value = self._visa.query("XMKR?")
+        return self.MODES[value]
+
+    @mode.setter
+    def mode(self, value):
+        self._visa.write(self.MODESLU[value])
+
+    def enable(self, markers):
+        """Enable (turn on) markers
+
+        Parameters
+        ----------
+        markers : int, list or 'all'
+            marker number 1 to 6
+        """
+        markers = range(1, 7) if markers == "all" else markers
+        markers = [markers] if isinstance(markers, int) else markers
+        for marker in markers:
+            self._visa.write(f"MR{marker}")
+
+    def disable(self, markers="all"):
+        """Disable (turn off) markers
+
+        Parameters
+        ----------
+        markers : int, list or 'all'
+        """
+        markers = range(1, 7) if markers == "all" else markers
+        markers = [markers] if isinstance(markers, int) else markers
+        for marker in markers:
+            self._visa.write(f"MO{marker}")
+
+    @property
+    def delta_reference(self):
+        """Delta reference marker
+
+        Parameters
+        ----------
+        value : int or None
+
+        Returns
+        -------
+        int or None
+        """
+        value = None
+        enabled = bool(int(self._visa.query("DRO?")))
+        if enabled:
+            drx = int(self._visa.query("DRX?"))
+            value = drx if drx > 0 else None
+        return value
+
+    @delta_reference.setter
+    def delta_reference(self, value):
+        if value is None:
+            self._visa.write("DRO")
+        else:
+            self._visa.write(f"DRF;DR{value}")
+
+    def set_xaxis_location(self, markers, locations):
+        """Set marker frequency/time
+
+        Parameters
+        ----------
+        markers : int or list
+        locations : float, str e.g. '1 GHz', {'min', 'max'} or list
+        """
+        if isinstance(markers, int):
+            markers = [markers]
+        if isinstance(locations, (int, float, str)):
+            locations = [locations]
+        for marker, location in zip(markers, locations):
+            if location == "min":
+                active_marker = self._visa.query("MRX?")
+                self._visa.write(f"MR{marker};MMN")
+                self._visa.write(f"MR{active_marker}")
+            elif location == "max":
+                active_marker = self._visa.query("MRX?")
+                self._visa.write(f"MR{marker};MMX")
+                self._visa.write(f"MR{active_marker}")
+            else:
+                self._visa.write(f"MK{marker} {location}")
+
+    def set_active(self, marker):
+        """Set marker active"""
+        self._visa.write(f"MR{marker}")
+
+    def search(self, value, reference="max", direction="right", timeout=3000):
+        """Search the active marker for value given reference and direction
+
+        Parameters
+        ----------
+        value : float, str e.g. '-3.0 dB'
+        reference : {'max', 'delta reference', '0 dB'}
+        direction : {'left', 'right'}
+        timeout : int milliseconds
+
+        Searching requires a completed sweep; so, set the timeout according to how
+        long it takes to acquire a full sweep for your particular setup.
+
+        Returns
+        -------
+        xaxis_location : float
+        """
+        active_marker = self._visa.query("MRX?")
+        original_timeout = self._visa.timeout
+        self._visa.timeout = timeout
+        REFERENCES = {"max": "MSRM", "delta reference": "MSRD", "0 dB": "MSR0"}
+        DIRECTIONS = {"right": "MKSR", "left": "MKSL"}
+        self._visa.write(
+            f"SMKR;{REFERENCES[reference]};{DIRECTIONS[direction]};SRCH {value};WFS"
+        )
+        self._visa.timeout = original_timeout
+        return float(self._visa.query(f"MK{active_marker}?"))
+
+    @property
+    def tracking(self):
+        """Tracking on/off status
+
+        Parameters
+        ----------
+        value : str {'on', 'off'}
+        """
+        enabled = bool(int(self._visa.query("MKTX?")))
+        return "on" if enabled else "off"
+
+    @tracking.setter
+    def tracking(self, value):
+        value = "1" if value == "on" else "0"
+        self._visa.write(f"MKT{value}")
+
+    @property
+    def visibility(self):
+        """Marker visibility
+
+        Parameters
+        ----------
+        value : {'on', 'off'}
+        """
+        visible = bool(int(self._visa.query("MON?")))
+        return "on" if visible else "off"
+
+    @visibility.setter
+    def visibility(self, value):
+        value = "MON" if value == "on" else "MOF"
+        self._visa.write(f"{value}")

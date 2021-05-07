@@ -39,8 +39,29 @@ It is also possible to read the S-parameters in [Touchstone](https://ibis.org/co
 >>>
 ```
 
+It is also possible to use the markers to find the -3 dB point of a filter. In this
+example, the VNA measured the -3 dB bandwidth of a Mini-Circuits VLF-1000+ low pass
+filter with nominal specification of 1.3 GHz. The VNA was already setup to measure
+S21 on channel 3 between 40 MHz and 5 GHz.
+
+```python
+In [1]: from anritsu_lightning import CommChannel
+In [2]: cc = CommChannel(address=6)
+In [3]: vna = cc.get_instrument()
+In [4]: vna.markers.mode = "normal"
+In [5]: vna.markers.enable([1, 2])
+In [6]: vna.markers.set_active(1)
+In [7]: vna.markers.set_xaxis_location(1, "40 MHz")
+In [8]: vna.markers.delta_reference = 1
+In [9]: vna.markers.set_active(2)
+In [10]: bw = vna.markers.search("-3 dB", reference="delta reference", timeout=5000)
+In [11]: print(f"{bw/1e9:.2f} GHz")
+1.26 GHz
+```
+
 Supported features:
 - Measurement setup: frequency sweep, data points, etc.
 - Channel setup: parameter (S11, S12, ...), graph type, etc.
 - Graph setup: scale, reference, offset
 - Data transfer: channel data, screen bitmap, S2P file
+- Markers
